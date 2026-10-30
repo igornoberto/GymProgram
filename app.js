@@ -172,6 +172,31 @@ window.addEventListener('popstate', () => { if (sheetOpen) hideSheet(); });
 $('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeSheet(); });
 const sheetHead = title => `<div class="sheet-h"><h2>${title}</h2><button class="x" data-act="close" aria-label="Fechar">${IC.x}</button></div>`;
 
+/* ---------- diálogos próprios (confirm/prompt nativos não funcionam em todo ambiente) ---------- */
+function dialog(body, setup) {
+  return new Promise(resolve => {
+    const o = document.createElement('div');
+    o.id = 'dlg';
+    o.innerHTML = `<div class="dlg-box">${body}</div>`;
+    document.body.appendChild(o);
+    const done = v => { o.remove(); resolve(v); };
+    o.addEventListener('click', e => { if (e.target === o) done(null); });
+    setup(o, done);
+  });
+}
+const confirmBox = (msg, ok = 'Confirmar') => dialog(
+  `<p>${esc(msg)}</p><div class="actions"><button class="btn ghost sm" data-r="0">Cancelar</button><button class="btn danger sm" data-r="1">${esc(ok)}</button></div>`,
+  (o, done) => o.querySelectorAll('[data-r]').forEach(b => b.onclick = () => done(b.dataset.r === '1')),
+).then(v => !!v);
+const promptBox = msg => dialog(
+  `<p>${esc(msg)}</p><input class="in" maxlength="24" id="dlg-in"><div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-r="0">Cancelar</button><button class="btn sm" data-r="1">Adicionar</button></div>`,
+  (o, done) => {
+    const i = o.querySelector('input'); i.focus();
+    i.onkeydown = e => { if (e.key === 'Enter') done(i.value); };
+    o.querySelectorAll('[data-r]').forEach(b => b.onclick = () => done(b.dataset.r === '1' ? i.value : null));
+  },
+);
+
 /* =====================================================================
    TELAS
    ===================================================================== */
@@ -630,7 +655,7 @@ function importData() {
     try {
       const data = JSON.parse(await inp.files[0].text());
       if (!Array.isArray(data.programs) || !Array.isArray(data.checkins)) throw new Error('formato');
-      if (!confirm('Substituir todos os dados atuais pelo backup?')) return;
+      if (!await confirmBox('Substituir todos os dados atuais pelo backup?', 'Substituir')) return;
       S = Object.assign(blank(), data); save(); closeSheet(); toast('Backup importado');
     } catch (e) { toast('Arquivo de backup inválido'); }
   };
@@ -666,8 +691,8 @@ const A = {
   'ci-add': el => { ci.rows.push({ m: el.dataset.m, v: 0, skip: false }); drawCheckin(); },
   'ci-save': () => saveCheckin(),
   'ci-edit': el => openCheckin({ id: el.dataset.id }),
-  'ci-del': el => {
-    if (!confirm('Excluir este check-in?')) return;
+  'ci-del': async el => {
+    if (!await confirmBox('Excluir este check-in?', 'Excluir')) return;
     const c = S.checkins.find(x => x.id === el.dataset.id);
     S.checkins = S.checkins.filter(x => x.id !== el.dataset.id); save();
     openDay(c.date); toast('Check-in excluído');
@@ -680,8 +705,8 @@ const A = {
     const p = JSON.parse(JSON.stringify(programById(el.dataset.id)));
     p.id = uid(); p.name += ' (cópia)'; S.programs.push(p); save(); render();
   },
-  'prog-del': el => {
-    if (!confirm('Excluir este programa? O histórico de check-ins será mantido.')) return;
+  'prog-del': async el => {
+    if (!await confirmBox('Excluir este programa? O histórico de check-ins será mantido.', 'Excluir')) return;
     S.programs = S.programs.filter(p => p.id !== el.dataset.id);
     if (S.activeProgramId === el.dataset.id) S.activeProgramId = S.programs[0] ? S.programs[0].id : null;
     save(); render();
@@ -692,8 +717,8 @@ const A = {
     d.muscles = d.muscles.includes(m) ? d.muscles.filter(x => x !== m) : [...d.muscles, m];
     drawEditor();
   },
-  'ed-newm': el => {
-    const name = (prompt('Nome do novo grupo muscular:') || '').trim().slice(0, 24);
+  'ed-newm': async el => {
+    const name = ((await promptBox('Nome do novo grupo muscular:')) || '').trim().slice(0, 24);
     if (!name) return;
     const found = allMuscles().find(m => m.toLowerCase() === name.toLowerCase());
     const m = found || name;
@@ -715,8 +740,8 @@ const A = {
   export: () => exportData(),
   import: () => importData(),
   install: async () => { if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; closeSheet(); } },
-  wipe: () => {
-    if (!confirm('Apagar TODOS os programas e check-ins deste aparelho?') || !confirm('Tem certeza? Isso não pode ser desfeito.')) return;
+  wipe: async () => {
+    if (!await confirmBox('Apagar TODOS os programas e check-ins deste aparelho? Isso não pode ser desfeito.', 'Apagar tudo')) return;
     S = blank(); save(); closeSheet(); toast('Dados apagados');
   },
 };
