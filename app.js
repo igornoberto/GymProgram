@@ -61,15 +61,22 @@ const IC = {
 
 /* ---------- armazenamento ---------- */
 const KEY = 'meutreino.v1';
-const blank = () => ({ v: 1, programs: [], checkins: [], activeProgramId: null, customMuscles: [] });
+const blank = () => ({ v: 1, programs: [], checkins: [], activeProgramId: null, customMuscles: [], tomb: {}, pushed: {}, metaU: 0 });
 function load() {
   try { const r = localStorage.getItem(KEY); if (r) return Object.assign(blank(), JSON.parse(r)); } catch (e) { /* ignora */ }
   return blank();
 }
 let S = load();
-function save() {
+function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Não foi possível salvar os dados'); }
 }
+/** salva no aparelho e agenda o envio para a nuvem (sync.js) */
+function save() {
+  persist();
+  if (typeof syncSoon === 'function') syncSoon();
+}
+const stamp = () => Date.now();
+function tombstone(kind, id) { S.tomb[id] = { k: kind, u: stamp() }; }
 
 /* ---------- domínio ---------- */
 const activeProgram = () => S.programs.find(p => p.id === S.activeProgramId) || null;
@@ -455,7 +462,8 @@ function saveCheckin() {
   if (!ci.date || !ci.time) return toast('Informe data e horário');
   const ratings = {};
   rows.forEach(r => { ratings[r.m] = r.v; });
-  const rec = { id: ci.id || uid(), programId: ci.programId, dayKey: ci.dayKey, date: ci.date, time: ci.time, ratings, note: ci.note.trim(), ts: Date.now() };
+  const rec = { id: ci.id || uid(), programId: ci.programId, dayKey: ci.dayKey, date: ci.date, time: ci.time, ratings, note: ci.note.trim(), ts: Date.now(), u: stamp() };
+  delete S.tomb[rec.id];
   const i = S.checkins.findIndex(c => c.id === rec.id);
   if (i >= 0) S.checkins[i] = rec; else S.checkins.push(rec);
   save();
@@ -622,10 +630,11 @@ function saveProgram() {
   ed.name = ed.name.trim() || 'Meu programa';
   if (ed.days.some(d => !d.muscles.length)) return toast('Escolha ao menos um grupo em cada dia');
   if (!Object.keys(ed.schedule).length) return toast('Escolha ao menos um dia da semana');
-  const p = { id: ed.id || uid(), name: ed.name, routine: ed.days.map(d => d.key).join(''), days: ed.days, start: ed.start, weeks: ed.weeks, schedule: ed.schedule };
+  const p = { id: ed.id || uid(), name: ed.name, routine: ed.days.map(d => d.key).join(''), days: ed.days, start: ed.start, weeks: ed.weeks, schedule: ed.schedule, u: stamp() };
   const i = S.programs.findIndex(x => x.id === p.id);
   if (i >= 0) S.programs[i] = p; else { S.programs.push(p); S.activeProgramId = p.id; }
   if (!S.activeProgramId) S.activeProgramId = p.id;
+  S.metaU = stamp();
   save(); ed = null;
   toast('Programa salvo');
   closeSheet();
@@ -634,8 +643,9 @@ function saveProgram() {
 /* ---------- Configurações / backup ---------- */
 function openSettings() {
   setSheet(`${sheetHead('Configurações')}
+    <div class="card"><h2>Nuvem</h2><div id="sync-card">${typeof Sync !== 'undefined' ? Sync.cardHtml() : ''}</div></div>
     <div class="card"><h2>Seus dados</h2>
-      <p class="sub" style="margin-top:-6px">Tudo fica salvo apenas neste aparelho. Faça backup de vez em quando.</p>
+      <p class="sub" style="margin-top:-6px">Os dados ficam salvos neste aparelho (e na nuvem, se você entrar com o Google). Você também pode guardar um arquivo de backup.</p>
       <div class="actions" style="margin-top:0"><button class="btn sm" data-act="export">Exportar backup</button><button class="btn ghost sm" data-act="import">Importar backup</button></div></div>
     ${installPrompt ? '<div class="card"><h2>Aplicativo</h2><button class="btn sm" data-act="install">Instalar na tela inicial</button></div>' : ''}
     <div class="card"><h2>Resumo</h2><p class="sub" style="margin:0">${S.programs.length} programa(s) · ${S.checkins.length} check-in(s)</p>
@@ -656,7 +666,12 @@ function importData() {
       const data = JSON.parse(await inp.files[0].text());
       if (!Array.isArray(data.programs) || !Array.isArray(data.checkins)) throw new Error('formato');
       if (!await confirmBox('Substituir todos os dados atuais pelo backup?', 'Substituir')) return;
-      S = Object.assign(blank(), data); save(); closeSheet(); toast('Backup importado');
+      const t = stamp(), old = S;
+      S = Object.assign(blank(), data, { tomb: {}, pushed: old.pushed, uid: old.uid, metaU: t });
+      S.programs.forEach(p => { p.u = t; }); S.checkins.forEach(c => { c.u = t; });
+      old.programs.forEach(p => { if (!S.programs.some(x => x.id === p.id)) S.tomb[p.id] = { k: 'program', u: t }; });
+      old.checkins.forEach(c => { if (!S.checkins.some(x => x.id === c.id)) S.tomb[c.id] = { k: 'checkin', u: t }; });
+      save(); closeSheet(); toast('Backup importado');
     } catch (e) { toast('Arquivo de backup inválido'); }
   };
   inp.click();
@@ -694,21 +709,22 @@ const A = {
   'ci-del': async el => {
     if (!await confirmBox('Excluir este check-in?', 'Excluir')) return;
     const c = S.checkins.find(x => x.id === el.dataset.id);
-    S.checkins = S.checkins.filter(x => x.id !== el.dataset.id); save();
+    S.checkins = S.checkins.filter(x => x.id !== el.dataset.id); tombstone('checkin', el.dataset.id); save();
     openDay(c.date); toast('Check-in excluído');
   },
 
   'prog-new': () => openProgEditor(),
   'prog-edit': el => openProgEditor(el.dataset.id),
-  'prog-activate': el => { S.activeProgramId = el.dataset.id; save(); render(); toast('Programa ativado'); },
+  'prog-activate': el => { S.activeProgramId = el.dataset.id; S.metaU = stamp(); save(); render(); toast('Programa ativado'); },
   'prog-dup': el => {
     const p = JSON.parse(JSON.stringify(programById(el.dataset.id)));
-    p.id = uid(); p.name += ' (cópia)'; S.programs.push(p); save(); render();
+    p.id = uid(); p.name += ' (cópia)'; p.u = stamp(); S.programs.push(p); save(); render();
   },
   'prog-del': async el => {
     if (!await confirmBox('Excluir este programa? O histórico de check-ins será mantido.', 'Excluir')) return;
     S.programs = S.programs.filter(p => p.id !== el.dataset.id);
-    if (S.activeProgramId === el.dataset.id) S.activeProgramId = S.programs[0] ? S.programs[0].id : null;
+    tombstone('program', el.dataset.id);
+    if (S.activeProgramId === el.dataset.id) { S.activeProgramId = S.programs[0] ? S.programs[0].id : null; S.metaU = stamp(); }
     save(); render();
   },
   'ed-n': el => { edSetN(+el.dataset.n, !ed.id); drawEditor(); },
@@ -722,7 +738,7 @@ const A = {
     if (!name) return;
     const found = allMuscles().find(m => m.toLowerCase() === name.toLowerCase());
     const m = found || name;
-    if (!found) { S.customMuscles.push(name); save(); }
+    if (!found) { S.customMuscles.push(name); S.metaU = stamp(); save(); }
     const d = ed.days[+el.dataset.d];
     if (!d.muscles.includes(m)) d.muscles.push(m);
     drawEditor();
@@ -737,12 +753,19 @@ const A = {
   },
   'ed-save': () => saveProgram(),
 
+  login: () => Sync.login(),
+  logout: () => Sync.logout(),
+  'sync-now': () => Sync.now(),
   export: () => exportData(),
   import: () => importData(),
   install: async () => { if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; closeSheet(); } },
   wipe: async () => {
-    if (!await confirmBox('Apagar TODOS os programas e check-ins deste aparelho? Isso não pode ser desfeito.', 'Apagar tudo')) return;
-    S = blank(); save(); closeSheet(); toast('Dados apagados');
+    if (!await confirmBox('Apagar TODOS os programas e check-ins? Se você estiver conectado à nuvem, eles também serão apagados dela e dos outros aparelhos. Isso não pode ser desfeito.', 'Apagar tudo')) return;
+    const t = stamp(), old = S;
+    S = Object.assign(blank(), { pushed: old.pushed, uid: old.uid, metaU: t });
+    old.programs.forEach(p => { S.tomb[p.id] = { k: 'program', u: t }; });
+    old.checkins.forEach(c => { S.tomb[c.id] = { k: 'checkin', u: t }; });
+    save(); closeSheet(); toast('Dados apagados');
   },
 };
 
