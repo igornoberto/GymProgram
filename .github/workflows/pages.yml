@@ -1,7 +1,7 @@
 name: Publicar no GitHub Pages
 on:
   push:
-    branches: [main]
+    branches: [main, claude/elegant-johnson-25c8tz]
   workflow_dispatch:
 permissions:
   contents: read
