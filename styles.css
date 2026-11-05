@@ -234,7 +234,7 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
 
 /* ---------- charts ---------- */
-.hbar { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
+.hbar { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
 .hbar .lb { display: flex; align-items: center; gap: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hbar .lb .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .hbar .track { height: 12px; background: var(--card2); border-radius: 6px; overflow: hidden; }
@@ -280,7 +280,7 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .sheet-h { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 16px; }
 .sheet-h h2 { margin: 0; font-size: 22px; }
 .sheet-h .x { width: 40px; height: 40px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
-.sheet .card { margin-bottom: 12px; }
+#sheet .card { margin-bottom: 14px; }
 .sheet-foot { position: sticky; bottom: -1px; padding-top: 10px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
 
 .field { display: block; margin-bottom: 14px; }
@@ -326,3 +326,6 @@ textarea.in { padding: 12px 14px; min-height: 70px; resize: none; }
 .dlg-box { background: var(--card); border-radius: 28px; padding: 22px; width: 100%; max-width: 360px; }
 .dlg-box p { margin: 0 0 16px; font-size: 16px; }
 .dlg-box .actions { margin-top: 0; justify-content: flex-end; }
+.two > * { min-width: 0; }
+.two .stepper { display: flex; justify-content: space-between; width: 100%; }
+.two .stepper b { min-width: 0; }

@@ -26,9 +26,9 @@ const WD_PLURAL = ['domingos', 'segundas', 'terças', 'quartas', 'quintas', 'sex
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 /* ---------- grupos musculares ---------- */
-const DEFAULT_MUSCLES = ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha', 'Abdômen', 'Antebraço', 'Trapézio'];
+const DEFAULT_MUSCLES = ['Peito', 'Costas', 'Ombro frontal', 'Ombro lateral', 'Ombro posterior', 'Bíceps', 'Tríceps', 'Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha', 'Abdômen', 'Antebraço', 'Trapézio'];
 const COLORS = {
-  Peito: '#ff5a5f', Costas: '#3e91ff', Ombros: '#ffa726', 'Bíceps': '#ab47bc', 'Tríceps': '#26c6da',
+  Peito: '#ff5a5f', Costas: '#3e91ff', Ombros: '#ffa726', 'Ombro frontal': '#ffa726', 'Ombro lateral': '#f57c00', 'Ombro posterior': '#ffcc80', 'Bíceps': '#ab47bc', 'Tríceps': '#26c6da',
   'Quadríceps': '#43a047', Posteriores: '#8d6e63', 'Glúteos': '#ec407a', Panturrilha: '#9ccc65',
   'Abdômen': '#fbc02d', Antebraço: '#78909c', 'Trapézio': '#5c6bc0',
 };
@@ -37,11 +37,11 @@ const colorOf = m => COLORS[m] || EXTRA[[...m].reduce((a, c) => a + c.charCodeAt
 const allMuscles = () => [...DEFAULT_MUSCLES, ...S.customMuscles.filter(m => !DEFAULT_MUSCLES.includes(m))];
 
 const TEMPLATES = {
-  2: [['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha', 'Abdômen']],
-  3: [['Peito', 'Ombros', 'Tríceps'], ['Costas', 'Bíceps', 'Trapézio'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha']],
-  4: [['Peito', 'Tríceps'], ['Costas', 'Bíceps'], ['Quadríceps', 'Panturrilha'], ['Ombros', 'Posteriores', 'Abdômen']],
-  5: [['Peito'], ['Costas'], ['Ombros', 'Trapézio'], ['Bíceps', 'Tríceps'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha']],
-  6: [['Peito'], ['Costas'], ['Quadríceps', 'Panturrilha'], ['Ombros'], ['Bíceps', 'Tríceps'], ['Posteriores', 'Glúteos', 'Abdômen']],
+  2: [['Peito', 'Costas', 'Ombro frontal', 'Ombro lateral', 'Ombro posterior', 'Bíceps', 'Tríceps'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha', 'Abdômen']],
+  3: [['Peito', 'Ombro frontal', 'Ombro lateral', 'Tríceps'], ['Costas', 'Ombro posterior', 'Bíceps', 'Trapézio'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha']],
+  4: [['Peito', 'Tríceps'], ['Costas', 'Bíceps'], ['Quadríceps', 'Panturrilha'], ['Ombro frontal', 'Ombro lateral', 'Ombro posterior', 'Posteriores', 'Abdômen']],
+  5: [['Peito'], ['Costas'], ['Ombro frontal', 'Ombro lateral', 'Ombro posterior', 'Trapézio'], ['Bíceps', 'Tríceps'], ['Quadríceps', 'Posteriores', 'Glúteos', 'Panturrilha']],
+  6: [['Peito'], ['Costas'], ['Quadríceps', 'Panturrilha'], ['Ombro frontal', 'Ombro lateral', 'Ombro posterior'], ['Bíceps', 'Tríceps'], ['Posteriores', 'Glúteos', 'Abdômen']],
 };
 const DEFAULT_DAYS = { 1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
 
