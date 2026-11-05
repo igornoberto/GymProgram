@@ -165,10 +165,11 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
 /* ---------- week strip ---------- */
-.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
+.week > button { min-width: 0; }
 .week .wd { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
 .day-c {
-  width: 40px; height: 40px; margin: 0 auto; border-radius: 50%;
+  width: min(40px, 100%); aspect-ratio: 1; margin: 0 auto; border-radius: 50%;
   display: grid; place-items: center; font-weight: 700; font-size: 15px;
   background: var(--card2); color: var(--sub);
 }
@@ -212,10 +213,10 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .cal-head .nav { display: flex; gap: 6px; }
 .cal-head .nav button { width: 40px; height: 40px; border-radius: 50%; background: var(--card2); display: grid; place-items: center; }
 .cal-head .nav svg { width: 20px; height: 20px; }
-.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal .dow { text-align: center; font-size: 12px; color: var(--sub); padding: 4px 0 6px; }
 .cell {
-  position: relative; aspect-ratio: 1 / 1.08; border-radius: 16px; padding: 5px 2px 4px;
+  position: relative; min-width: 0; height: clamp(54px, 15vw, 64px); overflow: hidden; border-radius: 16px; padding: 5px 2px 4px;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
   font-size: 14px; background: transparent;
 }
@@ -228,8 +229,8 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .cell .lt { position: absolute; top: 3px; right: 6px; font-size: 10px; font-weight: 700; color: var(--sub); }
 .cell.done .lt { color: var(--ok); }
 .cell.miss .lt { color: var(--bad); }
-.dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; max-width: 100%; }
-.dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.dots { display: flex; gap: 2px; flex-wrap: nowrap; justify-content: center; max-width: 100%; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; display: block; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--sub); margin-top: 14px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
@@ -346,18 +347,21 @@ textarea.in { padding: 12px 14px; min-height: 70px; resize: none; }
   .filters.stack { flex-direction: column; align-items: stretch; }
 
   /* estatísticas: duas colunas sem buracos */
-  .grid.masonry { display: block; columns: 2; column-gap: 14px; }
-  .grid.masonry > * { break-inside: avoid; margin-bottom: 14px; }
 
   /* início */
   .ring-row .tiles { grid-template-columns: repeat(4, 1fr); }
   .ring-row .tile b { font-size: 24px; }
 
   /* calendário: mês à esquerda, resumo à direita */
-  .cal-wrap { grid-template-columns: minmax(0, 1.9fr) minmax(220px, 1fr); align-items: start; }
-  .cal-wrap .tiles.four { grid-template-columns: 1fr 1fr; }
-  .cell { aspect-ratio: 1 / .85; }
+  .cell { height: 66px; }
 
   /* programa: dias em duas colunas dentro do cartão */
   .prog-days { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+}
+
+@media (min-width: 900px) {
+  .cal-wrap { grid-template-columns: minmax(0, 1.9fr) minmax(220px, 1fr); align-items: start; }
+  .cal-wrap .tiles.four { grid-template-columns: 1fr 1fr; }
+  .grid.masonry { display: block; columns: 2; column-gap: 14px; }
+  .grid.masonry > * { break-inside: avoid; margin-bottom: 14px; }
 }

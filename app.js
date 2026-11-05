@@ -367,7 +367,7 @@ function viewCal() {
     else if (key && d < t && !S.checkins.some(c => c.programId === pr.id && c.date === di)) cls = 'miss';
     else if (key) cls = 'plan';
     if (d.getTime() === t.getTime()) cls += ' today';
-    const ms = [...new Set(cis.flatMap(c => Object.keys(c.ratings)))].slice(0, 6);
+    const ms = [...new Set(cis.flatMap(c => Object.keys(c.ratings)))].slice(0, 5);
     cells += `<button class="cell ${cls}" data-act="day" data-date="${di}">${key ? `<span class="lt">${key}</span>` : ''}<span class="n">${n}</span>
       <span class="dots">${ms.map(m => `<i style="background:${colorOf(m)}"></i>`).join('')}</span></button>`;
   }
