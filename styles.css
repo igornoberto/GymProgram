@@ -69,6 +69,7 @@ svg { display: block; }
 #app { display: flex; flex-direction: column; min-height: 100dvh; }
 #view {
   flex: 1;
+  min-width: 0;
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
@@ -115,7 +116,7 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .muted { color: var(--sub); }
 
 /* ---------- cards ---------- */
-.grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 @media (min-width: 720px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .span2 { grid-column: 1 / -1; } }
 .card { min-width: 0; background: var(--card); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow); }
 .card.flat { padding: 14px; }
@@ -234,7 +235,7 @@ h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -.2px; }
 .legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
 
 /* ---------- charts ---------- */
-.hbar { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
+.hbar { display: grid; grid-template-columns: 132px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
 .hbar .lb { display: flex; align-items: center; gap: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hbar .lb .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .hbar .track { height: 12px; background: var(--card2); border-radius: 6px; overflow: hidden; }
@@ -329,3 +330,34 @@ textarea.in { padding: 12px 14px; min-height: 70px; resize: none; }
 .two > * { min-width: 0; }
 .two .stepper { display: flex; justify-content: space-between; width: 100%; }
 .two .stepper b { min-width: 0; }
+
+/* ---------- telas largas (Fold aberto, tablets) ---------- */
+.card.center { display: flex; flex-direction: column; justify-content: center; }
+.filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.filters .scroll-x { margin-bottom: 0 !important; }
+.cal-wrap { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.cal-wrap .tiles { flex: none; }
+.prog-days { display: block; }
+
+@media (min-width: 720px) {
+  /* filtros quebram linha em vez de rolar para o lado, e se espalham pela largura */
+  .scroll-x { flex-wrap: wrap; overflow: visible; margin: 0; }
+  .filters { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 24px; }
+  .filters.stack { flex-direction: column; align-items: stretch; }
+
+  /* estatísticas: duas colunas sem buracos */
+  .grid.masonry { display: block; columns: 2; column-gap: 14px; }
+  .grid.masonry > * { break-inside: avoid; margin-bottom: 14px; }
+
+  /* início */
+  .ring-row .tiles { grid-template-columns: repeat(4, 1fr); }
+  .ring-row .tile b { font-size: 24px; }
+
+  /* calendário: mês à esquerda, resumo à direita */
+  .cal-wrap { grid-template-columns: minmax(0, 1.9fr) minmax(220px, 1fr); align-items: start; }
+  .cal-wrap .tiles.four { grid-template-columns: 1fr 1fr; }
+  .cell { aspect-ratio: 1 / .85; }
+
+  /* programa: dias em duas colunas dentro do cartão */
+  .prog-days { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+}

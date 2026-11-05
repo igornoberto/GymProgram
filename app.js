@@ -282,18 +282,18 @@ function viewHome() {
     const elapsed = Math.floor((t - parseISO(p.start)) / 864e5);
     const wk = Math.min(p.weeks, Math.max(0, Math.floor(elapsed / 7) + 1));
     const f = Math.max(0, Math.min(1, elapsed / (p.weeks * 7)));
-    progress = `<div class="card"><div class="card-h"><h2>${esc(p.name)}</h2><span class="sub">${t < parseISO(p.start) ? 'não iniciou' : `semana ${wk} de ${p.weeks}`}</span></div>
+    progress = `<div class="card span2"><div class="card-h"><h2>${esc(p.name)}</h2><span class="sub">${t < parseISO(p.start) ? 'não iniciou' : `semana ${wk} de ${p.weeks}`}</span></div>
       <div class="track" style="height:12px;background:var(--card2);border-radius:6px;overflow:hidden"><div style="height:100%;width:${f * 100}%;background:var(--accent);border-radius:6px"></div></div>
       <p class="sub" style="margin:10px 0 0">${brDate(p.start)} → ${brDate(iso(programEnd(p)))}</p></div>`;
   } else {
-    progress = `<div class="card"><div class="card-h"><h2>${esc(p.name)}</h2><span class="sub">desde ${brDate(p.start)}</span></div></div>`;
+    progress = `<div class="card span2"><div class="card-h"><h2>${esc(p.name)}</h2><span class="sub">desde ${brDate(p.start)}</span></div></div>`;
   }
 
   const recent = sortedCheckins().slice(0, 4).map(c => ciRow(c)).join('');
 
   return head + `<div class="grid">
     <div>${hero}</div>
-    <div class="card"><div class="card-h"><h2>Esta semana</h2><span class="sub">${weekDone} de ${weekPlanned || '–'} treinos</span></div><div class="week">${cells.join('')}</div></div>
+    <div class="card center"><div class="card-h"><h2>Esta semana</h2><span class="sub">${weekDone} de ${weekPlanned || '–'} treinos</span></div><div class="week">${cells.join('')}</div></div>
     <div class="card span2"><div class="ring-row">${ring(pct, 'var(--ok)', `${weekDone}/${weekPlanned}`, 'semana')}
       <div class="tiles">
         <div class="tile"><b>${streak()}</b><span>treinos seguidos</span></div>
@@ -302,7 +302,7 @@ function viewHome() {
         <div class="tile"><b>${adh === null ? '–' : adh + '%'}</b><span>aderência ao plano</span></div>
       </div></div></div>
     ${progress}
-    <div class="card"><div class="card-h"><h2>Recentes</h2><button class="link" data-act="tab" data-tab="cal">Ver tudo</button></div>
+    <div class="card span2"><div class="card-h"><h2>Recentes</h2><button class="link" data-act="tab" data-tab="cal">Ver tudo</button></div>
       ${recent || '<p class="sub" style="margin:0">Seus check-ins aparecerão aqui.</p>'}</div>
   </div>`;
 }
@@ -323,15 +323,15 @@ function calFiltered(c) {
 }
 function viewCal() {
   const f = ui.cal, t = today0();
-  const filters = `
-    <div class="scroll-x" style="margin-bottom:8px">
+  const filters = `<div class="filters stack">
+    <div class="scroll-x">
       <button class="chip ${f.prog === 'all' ? 'on' : ''}" data-act="cal-prog" data-v="all">Todos os programas</button>
       ${S.programs.map(p => `<button class="chip ${f.prog === p.id ? 'on' : ''}" data-act="cal-prog" data-v="${p.id}">${esc(p.name)}</button>`).join('')}
     </div>
-    <div class="scroll-x" style="margin-bottom:14px">
+    <div class="scroll-x">
       <button class="chip ${f.muscle === 'all' ? 'on' : ''}" data-act="cal-muscle" data-v="all">Todos os grupos</button>
       ${allMuscles().map(m => `<button class="chip ${f.muscle === m ? 'on' : ''}" data-act="cal-muscle" data-v="${esc(m)}"><i class="dot" style="background:${colorOf(m)}"></i>${esc(m)}</button>`).join('')}
-    </div>`;
+    </div></div>`;
   const head = pageHead('Calendário', '', `<div class="seg"><button class="${f.mode === 'month' ? 'on' : ''}" data-act="cal-mode" data-v="month">Mês</button><button class="${f.mode === 'list' ? 'on' : ''}" data-act="cal-mode" data-v="list">Histórico</button></div>`);
 
   if (f.mode === 'list') {
@@ -373,18 +373,18 @@ function viewCal() {
   }
   const avg = mean(monthCis.map(ciAvg).filter(x => x));
   const title = `${MONTHS[f.m]} ${f.y}`;
-  return head + filters + `<div class="card"><div class="cal-head"><h2>${title}</h2><div class="nav">
+  return head + filters + `<div class="cal-wrap"><div><div class="card"><div class="cal-head"><h2>${title}</h2><div class="nav">
       <button data-act="cal-nav" data-v="-1" aria-label="Mês anterior">${IC.left}</button>
       <button data-act="cal-today" style="width:auto;padding:0 14px;border-radius:20px;font-size:14px;font-weight:600">Hoje</button>
       <button data-act="cal-nav" data-v="1" aria-label="Próximo mês">${IC.right}</button></div></div>
     <div class="cal">${cells}</div>
-    <div class="legend"><span><i style="background:var(--ok-soft)"></i>Treinou</span><span><i style="background:var(--bad-soft)"></i>Faltou</span><span><i style="box-shadow:inset 0 0 0 1.5px var(--line)"></i>Planejado</span><span>Letra = treino do dia</span></div></div>
-    <div class="tiles four" style="margin-top:14px">
+    <div class="legend"><span><i style="background:var(--ok-soft)"></i>Treinou</span><span><i style="background:var(--bad-soft)"></i>Faltou</span><span><i style="box-shadow:inset 0 0 0 1.5px var(--line)"></i>Planejado</span><span>Letra = treino do dia</span></div></div></div>
+    <div class="tiles four">
       <div class="tile" style="background:var(--card)"><b>${monthCis.length}</b><span>treinos no mês</span></div>
       <div class="tile" style="background:var(--card)"><b>${avg ? fmt1(avg) + ' ★' : '–'}</b><span>nota média</span></div>
       <div class="tile" style="background:var(--card)"><b>${new Set(monthCis.map(c => c.date)).size}</b><span>dias na academia</span></div>
       <div class="tile" style="background:var(--card)"><b>${(() => { const c = {}; monthCis.forEach(x => Object.keys(x.ratings).forEach(m => c[m] = (c[m] || 0) + 1)); const e = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return e ? esc(e[0]) : '–'; })()}</b><span>mais treinado</span></div>
-    </div>`;
+    </div></div>`;
 }
 
 function openDay(date) {
@@ -478,8 +478,8 @@ function viewStats() {
   const from = f.range ? addDays(t, -(f.range - 1)) : null, fromI = from ? iso(from) : '';
   const progs = f.prog === 'all' ? S.programs : S.programs.filter(p => p.id === f.prog);
   const head = pageHead('Estatísticas', '');
-  const filters = `<div class="scroll-x" style="margin-bottom:8px">${[[30, '30 dias'], [90, '90 dias'], [365, '1 ano'], [0, 'Tudo']].map(([v, l]) => `<button class="chip ${f.range === v ? 'on' : ''}" data-act="st-range" data-v="${v}">${l}</button>`).join('')}</div>
-    <div class="scroll-x" style="margin-bottom:14px"><button class="chip ${f.prog === 'all' ? 'on' : ''}" data-act="st-prog" data-v="all">Todos os programas</button>${S.programs.map(p => `<button class="chip ${f.prog === p.id ? 'on' : ''}" data-act="st-prog" data-v="${p.id}">${esc(p.name)}</button>`).join('')}</div>`;
+  const filters = `<div class="filters"><div class="scroll-x">${[[30, '30 dias'], [90, '90 dias'], [365, '1 ano'], [0, 'Tudo']].map(([v, l]) => `<button class="chip ${f.range === v ? 'on' : ''}" data-act="st-range" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="scroll-x"><button class="chip ${f.prog === 'all' ? 'on' : ''}" data-act="st-prog" data-v="all">Todos os programas</button>${S.programs.map(p => `<button class="chip ${f.prog === p.id ? 'on' : ''}" data-act="st-prog" data-v="${p.id}">${esc(p.name)}</button>`).join('')}</div></div>`;
   const cis = S.checkins.filter(c => c.date >= fromI && (f.prog === 'all' || c.programId === f.prog));
   if (!cis.length) return head + filters + `<div class="card">${emptyState(IC.chart, 'Sem dados ainda', 'Faça seus primeiros check-ins para ver estatísticas de grupos, horários e notas.')}</div>`;
 
@@ -529,7 +529,7 @@ function viewStats() {
       <div class="tile" style="background:var(--card)"><b>${adh === null ? '–' : adh + '%'}</b><span>aderência</span></div>
       <div class="tile" style="background:var(--card)"><b>${overall ? fmt1(overall) + ' ★' : '–'}</b><span>nota média</span></div>
       <div class="tile" style="background:var(--card)"><b>${streak()}</b><span>sequência atual</span></div></div>
-    <div class="grid">
+    <div class="grid masonry">
     <div class="card"><div class="card-h"><h2>Grupos mais treinados</h2></div>
       ${mgList.map(([m, o]) => hbar(m, 100 * o.n / mgMax, `${o.n}× ${o.r.length ? '· ' + fmt1(mean(o.r)) + '★' : ''}`, colorOf(m), colorOf(m))).join('')}</div>
 
@@ -564,9 +564,9 @@ function viewProg() {
     const end = programEnd(p), st = parseISO(p.start);
     const status = t < st ? 'Agendado' : end && t > end ? 'Encerrado' : 'Em andamento';
     const sched = [1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip" style="padding:4px 10px;font-size:13px;${p.schedule[i] ? 'background:var(--accent-soft);color:var(--accent);font-weight:700' : ''}">${WD[i]} ${p.schedule[i] || '–'}</span>`).join('');
-    return `<div class="card prog"><div class="card-h"><div><h3>${esc(p.name)}</h3><span class="sub">Rotina ${p.days.map(d => d.key).join('')} · ${p.weeks ? p.weeks + ' semanas' : 'sem data final'}</span></div>
+    return `<div class="card prog span2"><div class="card-h"><div><h3>${esc(p.name)}</h3><span class="sub">Rotina ${p.days.map(d => d.key).join('')} · ${p.weeks ? p.weeks + ' semanas' : 'sem data final'}</span></div>
       <span class="badge ${p.id === S.activeProgramId ? 'on' : ''}">${p.id === S.activeProgramId ? 'Ativo' : status}</span></div>
-      ${p.days.map(d => `<div class="daybox"><div class="k">${d.key}</div><div class="chips">${d.muscles.map(chip).join('') || '<span class="sub">sem grupos</span>'}</div></div>`).join('')}
+      <div class="prog-days">${p.days.map(d => `<div class="daybox"><div class="k">${d.key}</div><div class="chips">${d.muscles.map(chip).join('') || '<span class="sub">sem grupos</span>'}</div></div>`).join('')}</div>
       <div class="sub" style="margin:10px 0 8px">${brDate(p.start)}${end ? ' → ' + brDate(iso(end)) : ' → ∞'}</div>
       <div class="chips" style="gap:6px">${sched}</div>
       <div class="actions">${p.id === S.activeProgramId ? '' : `<button class="btn sm" data-act="prog-activate" data-id="${p.id}">Ativar</button>`}
