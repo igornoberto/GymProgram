@@ -365,3 +365,15 @@ textarea.in { padding: 12px 14px; min-height: 70px; resize: none; }
   .grid.masonry { display: block; columns: 2; column-gap: 14px; }
   .grid.masonry > * { break-inside: avoid; margin-bottom: 14px; }
 }
+
+/* programação corrida / dias sem treino / meta semanal */
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; position: relative; z-index: 1; }
+.hero-actions .btn { margin-top: 0; }
+.btn.glass { background: rgba(255,255,255,.22); color: #fff; }
+.day-c.skip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line); color: var(--sub); }
+.cell.skip { box-shadow: inset 0 0 0 1.5px var(--sub); background: transparent; opacity: .65; }
+.cell.skip .n { text-decoration: line-through; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.chip.track { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.chip.risk { background: var(--bad-soft); color: var(--bad); font-weight: 600; }
+.seg button { white-space: nowrap; }

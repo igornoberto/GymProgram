@@ -83,12 +83,60 @@ const activeProgram = () => S.programs.find(p => p.id === S.activeProgramId) || 
 const programById = id => S.programs.find(p => p.id === id);
 const programEnd = p => (p.weeks > 0 ? addDays(parseISO(p.start), p.weeks * 7 - 1) : null);
 
-function planKey(p, date) {
-  if (date < parseISO(p.start)) return null;
-  const end = programEnd(p);
-  if (end && date > end) return null;
-  return p.schedule[date.getDay()] || null;
+const isRolling = p => p.mode === 'rolling';
+const availDays = p => p.avail || [0, 1, 2, 3, 4, 5, 6];
+const inPlan = (p, d) => { if (d < parseISO(p.start)) return false; const e = programEnd(p); return !(e && d > e); };
+/** o dia faz parte da rotina do programa (antes de considerar os dias marcados para pular) */
+const baseDay = (p, d) => inPlan(p, d) && (isRolling(p) ? availDays(p).includes(d.getDay()) : !!p.schedule[d.getDay()]);
+const isSkipped = (p, d) => (p.skips || []).includes(iso(d));
+const isPlanned = (p, d) => baseDay(p, d) && !isSkipped(p, d);
+
+/** programação corrida: a próxima rotina é a seguinte à do último check-in */
+function nextRollingIdx(p) {
+  const last = S.checkins
+    .filter(c => c.programId === p.id && p.days.some(x => x.key === c.dayKey))
+    .sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time))[0];
+  return last ? (p.days.findIndex(x => x.key === last.dayKey) + 1) % p.days.length : 0;
 }
+/** rotina prevista para o dia (null = descanso, pulo ou fora do plano) */
+function planKey(p, d) {
+  if (!isPlanned(p, d)) return null;
+  if (!isRolling(p)) return p.schedule[d.getDay()];
+  const di = iso(d), done = S.checkins.find(c => c.programId === p.id && c.date === di);
+  if (done) return done.dayKey;
+  const t = today0();
+  if (d < t) return null;
+  let idx = nextRollingIdx(p);
+  for (let x = S.checkins.some(c => c.programId === p.id && c.date === iso(t)) ? addDays(t, 1) : t; x <= d; x = addDays(x, 1)) {
+    if (!isPlanned(p, x)) continue;
+    if (iso(x) === di) return p.days[idx % p.days.length].key;
+    idx++;
+  }
+  return null;
+}
+/** próximos treinos ainda não feitos */
+function upcoming(p, n = 7) {
+  const t = today0(), out = [];
+  for (let i = 0; i < 60 && out.length < n; i++) {
+    const d = addDays(t, i), k = planKey(p, d);
+    if (k && !S.checkins.some(c => c.programId === p.id && c.date === iso(d))) out.push({ date: d, key: k });
+  }
+  return out;
+}
+/** quantas vezes por semana cada grupo entra no programa */
+function weeklyFreq(p) {
+  const f = {};
+  p.days.forEach(d => d.muscles.forEach(m => { f[m] = 0; }));
+  if (isRolling(p)) {
+    const per = availDays(p).length / p.days.length;
+    p.days.forEach(d => d.muscles.forEach(m => { f[m] += per; }));
+  } else {
+    Object.values(p.schedule).forEach(k => dayMuscles(p, k).forEach(m => { f[m] += 1; }));
+  }
+  return f;
+}
+const MIN_WEEK = 2;
+const meets = v => v >= MIN_WEEK - 1e-9;
 const dayMuscles = (p, key) => (p.days.find(d => d.key === key) || { muscles: [] }).muscles;
 const ciAvg = c => {
   const v = Object.values(c.ratings).filter(x => x > 0);
@@ -108,11 +156,10 @@ function plannedDays(p, from, to) {
   if (end && end < last) last = end;
   const out = [];
   for (; d <= last; d = addDays(d, 1)) {
-    const key = planKey(p, d);
-    if (!key) continue;
+    if (!isPlanned(p, d)) continue;
     const done = S.checkins.some(c => c.programId === p.id && c.date === iso(d));
     if (!done && d.getTime() === t.getTime()) continue;
-    out.push({ date: d, key, done });
+    out.push({ date: d, key: planKey(p, d), done });
   }
   return out;
 }
@@ -220,6 +267,12 @@ function pageHead(title, subtitle, right) {
 const gearBtn = `<button class="icon-btn" data-act="settings" aria-label="Configurações">${IC.gear}</button>`;
 
 /* ---------- Início ---------- */
+function nextWorkoutText(p, t) {
+  const n = upcoming(p, 1)[0];
+  if (!n) return '';
+  const diff = Math.round((n.date - t) / 864e5);
+  return `Próximo: Treino ${n.key} · ${diff === 1 ? 'amanhã' : WD_LONG[n.date.getDay()]}.`;
+}
 function viewHome() {
   const t = today0(), ti = iso(t), p = activeProgram();
   const sub = `${WD_LONG[t.getDay()]}, ${t.getDate()} de ${MONTHS[t.getMonth()]}`;
@@ -238,17 +291,18 @@ function viewHome() {
       <div class="chips">${Object.keys(c.ratings).map(m => chip(m)).join('')}</div>
       <p style="margin:12px 0 0;position:relative;z-index:1">${c.time}${a ? ` · nota média ${fmt1(a)} ★` : ''}</p>
       <button class="btn light sm" data-act="checkin" data-date="${ti}" data-key="${key || ''}">Registrar outro</button></div>`;
+  } else if (isSkipped(p, t) && baseDay(p, t)) {
+    hero = `<div class="hero rest"><div class="kicker">Hoje</div><h2>Dia sem treino</h2><p style="margin:0;position:relative;z-index:1">Você marcou hoje para pular. ${nextWorkoutText(p, t)}</p>
+      <div class="hero-actions"><button class="btn light sm" data-act="skip-toggle" data-date="${ti}">Desmarcar</button><button class="btn glass sm" data-act="checkin" data-date="${ti}" data-key="">Treinar mesmo assim</button></div></div>`;
   } else if (key) {
-    hero = `<div class="hero"><div class="kicker">Hoje</div><h2>Treino ${key}</h2>
+    hero = `<div class="hero"><div class="kicker">Hoje${isRolling(p) ? ' · próxima da sequência' : ''}</div><h2>Treino ${key}</h2>
       <div class="chips">${dayMuscles(p, key).map(chip).join('')}</div>
-      <button class="btn light" data-act="checkin" data-date="${ti}" data-key="${key}">Fazer check-in</button></div>`;
+      <div class="hero-actions"><button class="btn light" data-act="checkin" data-date="${ti}" data-key="${key}">Fazer check-in</button><button class="btn glass sm" data-act="skip-toggle" data-date="${ti}">Hoje não vou</button></div></div>`;
   } else {
     let msg = 'Dia de descanso', extra = '';
     if (t < parseISO(p.start)) msg = `Seu plano começa em ${brDate(p.start)}`;
     else if (programEnd(p) && t > programEnd(p)) { msg = 'Seu plano terminou'; extra = ' Renove no Programa.'; }
-    let next = '';
-    for (let i = 1; i <= 7; i++) { const k = planKey(p, addDays(t, i)); if (k) { next = `Próximo: Treino ${k} · ${WD_LONG[addDays(t, i).getDay()]}`; break; } }
-    hero = `<div class="hero rest"><div class="kicker">Hoje</div><h2>${msg}</h2><p style="margin:0;position:relative;z-index:1">${next}${extra}</p>
+    hero = `<div class="hero rest"><div class="kicker">Hoje</div><h2>${msg}</h2><p style="margin:0;position:relative;z-index:1">${nextWorkoutText(p, t)}${extra}</p>
       <button class="btn light sm" data-act="checkin" data-date="${ti}" data-key="">Treinar mesmo assim</button></div>`;
   }
 
@@ -257,13 +311,14 @@ function viewHome() {
   let weekDone = 0, weekPlanned = 0;
   const cells = [];
   for (let i = 0; i < 7; i++) {
-    const d = addDays(wkStart, i), di = iso(d), k = planKey(p, d), done = S.checkins.some(c => c.date === di);
-    if (k) weekPlanned++;
+    const d = addDays(wkStart, i), di = iso(d), k = planKey(p, d), pl = isPlanned(p, d), done = S.checkins.some(c => c.date === di);
+    if (pl) weekPlanned++;
     if (done) weekDone++;
     let cls = '', inner = k || '·';
     if (done) { cls = 'done'; inner = IC.check; }
-    else if (k && d < t) { cls = 'miss'; inner = IC.x; }
-    else if (k) cls = 'plan';
+    else if (isSkipped(p, d) && baseDay(p, d)) { cls = 'skip'; inner = '–'; }
+    else if (pl && d < t) { cls = 'miss'; inner = IC.x; }
+    else if (pl) cls = 'plan';
     if (di === ti) cls += ' today';
     cells.push(`<button data-act="day" data-date="${di}"><div class="wd">${WD[i]}</div><div class="day-c ${cls}">${inner}</div><div class="dn">${d.getDate()}</div></button>`);
   }
@@ -360,12 +415,18 @@ function viewCal() {
     const d = new Date(f.y, f.m, n), di = iso(d);
     const cis = ciOn(di).filter(calFiltered);
     monthCis.push(...cis);
-    let key = null, pr = null;
-    for (const p of progs) { const k = planKey(p, d); if (k && (f.muscle === 'all' || dayMuscles(p, k).includes(f.muscle))) { key = k; pr = p; break; } }
+    let key = null, pr = null, planned = false, skipped = false;
+    for (const p of progs) {
+      if (isSkipped(p, d) && baseDay(p, d)) skipped = true;
+      if (!isPlanned(p, d)) continue;
+      const k = planKey(p, d);
+      if (f.muscle === 'all' || (k && dayMuscles(p, k).includes(f.muscle))) { key = k; pr = p; planned = true; break; }
+    }
     let cls = '';
     if (cis.length) cls = 'done';
-    else if (key && d < t && !S.checkins.some(c => c.programId === pr.id && c.date === di)) cls = 'miss';
-    else if (key) cls = 'plan';
+    else if (planned && d < t && !S.checkins.some(c => c.programId === pr.id && c.date === di)) cls = 'miss';
+    else if (planned) cls = 'plan';
+    else if (skipped && f.muscle === 'all') cls = 'skip';
     if (d.getTime() === t.getTime()) cls += ' today';
     const ms = [...new Set(cis.flatMap(c => Object.keys(c.ratings)))].slice(0, 5);
     cells += `<button class="cell ${cls}" data-act="day" data-date="${di}">${key ? `<span class="lt">${key}</span>` : ''}<span class="n">${n}</span>
@@ -378,7 +439,7 @@ function viewCal() {
       <button data-act="cal-today" style="width:auto;padding:0 14px;border-radius:20px;font-size:14px;font-weight:600">Hoje</button>
       <button data-act="cal-nav" data-v="1" aria-label="Próximo mês">${IC.right}</button></div></div>
     <div class="cal">${cells}</div>
-    <div class="legend"><span><i style="background:var(--ok-soft)"></i>Treinou</span><span><i style="background:var(--bad-soft)"></i>Faltou</span><span><i style="box-shadow:inset 0 0 0 1.5px var(--line)"></i>Planejado</span><span>Letra = treino do dia</span></div></div></div>
+    <div class="legend"><span><i style="background:var(--ok-soft)"></i>Treinou</span><span><i style="background:var(--bad-soft)"></i>Faltou</span><span><i style="box-shadow:inset 0 0 0 1.5px var(--line)"></i>Planejado</span><span><i style="border:1.5px dashed var(--sub)"></i>Sem treino</span><span>Letra = treino do dia</span></div></div></div>
     <div class="tiles four">
       <div class="tile" style="background:var(--card)"><b>${monthCis.length}</b><span>treinos no mês</span></div>
       <div class="tile" style="background:var(--card)"><b>${avg ? fmt1(avg) + ' ★' : '–'}</b><span>nota média</span></div>
@@ -402,6 +463,11 @@ function openDay(date) {
       <div class="actions"><button class="btn ghost sm" data-act="ci-edit" data-id="${c.id}">Editar</button><button class="btn danger sm" data-act="ci-del" data-id="${c.id}">Excluir</button></div></div>`;
   }).join('');
   if (!cis.length) html += `<div class="card"><p class="sub" style="margin:0;text-align:center">${d > t ? 'Dia futuro.' : 'Nenhum treino registrado neste dia.'}</p></div>`;
+  const p0 = activeProgram();
+  if (p0 && d >= t && baseDay(p0, d)) {
+    const sk = isSkipped(p0, d);
+    html += `${sk ? '<div class="card"><p class="sub" style="margin:0;text-align:center">Dia marcado como sem treino.</p></div>' : ''}<button class="btn ghost block" style="margin-bottom:10px" data-act="skip-toggle" data-date="${date}">${sk ? 'Desmarcar dia sem treino' : 'Marcar como dia sem treino'}</button>`;
+  }
   if (d <= t) {
     const p = activeProgram();
     const key = (plans.find(x => p && x.p.id === p.id) || plans[0] || {}).k || '';
@@ -422,7 +488,7 @@ function openCheckin({ date, key, id }) {
   } else {
     const p = activeProgram() || S.programs[0];
     ci = { id: null, programId: p.id, dayKey: key || '', date, time: date === iso(new Date()) ? nowTime() : '18:00', note: '', more: false, rows: [] };
-    if (!ci.dayKey) ci.dayKey = p.days[0].key;
+    if (!ci.dayKey) ci.dayKey = isRolling(p) ? p.days[nextRollingIdx(p)].key : p.days[0].key;
     ci.rows = dayMuscles(p, ci.dayKey).map(m => ({ m, v: 0, skip: false }));
   }
   drawCheckin();
@@ -522,6 +588,7 @@ function viewStats() {
   const wMax = Math.max(1, ...weeks.map(w => w.n));
 
   const overall = mean(cis.map(ciAvg).filter(x => x));
+  const freqHtml = freqStatsHtml(progs, from);
   const worst = wd.map((w, i) => ({ i, ...w, rate: w.planned ? 1 - w.done / w.planned : 0 })).filter(w => w.planned >= 2 && w.rate > 0).sort((a, b) => b.rate - a.rate)[0];
 
   return head + filters + `<div class="tiles four" style="margin-bottom:14px">
@@ -529,6 +596,7 @@ function viewStats() {
       <div class="tile" style="background:var(--card)"><b>${adh === null ? '–' : adh + '%'}</b><span>aderência</span></div>
       <div class="tile" style="background:var(--card)"><b>${overall ? fmt1(overall) + ' ★' : '–'}</b><span>nota média</span></div>
       <div class="tile" style="background:var(--card)"><b>${streak()}</b><span>sequência atual</span></div></div>
+    ${freqHtml}
     <div class="grid masonry">
     <div class="card"><div class="card-h"><h2>Grupos mais treinados</h2></div>
       ${mgList.map(([m, o]) => hbar(m, 100 * o.n / mgMax, `${o.n}× ${o.r.length ? '· ' + fmt1(mean(o.r)) + '★' : ''}`, colorOf(m), colorOf(m))).join('')}</div>
@@ -555,6 +623,60 @@ function viewStats() {
     </div>`;
 }
 
+/** meta de treinar cada grupo ao menos 2× por semana: semana atual (com previsão) e semanas completas */
+function freqStatsHtml(progs, from) {
+  const t = today0(), thisWs = addDays(t, -t.getDay());
+  const prog = ui.stats.prog === 'all' ? activeProgram() : programById(ui.stats.prog);
+  const cis = S.checkins.filter(c => ui.stats.prog === 'all' || c.programId === ui.stats.prog);
+  if (!cis.length) return '';
+  const byWeek = {};
+  cis.forEach(c => {
+    const ws = iso(addDays(parseISO(c.date), -parseISO(c.date).getDay()));
+    Object.keys(c.ratings).forEach(m => { ((byWeek[ws] = byWeek[ws] || {})[m] = byWeek[ws][m] || new Set()).add(c.date); });
+  });
+  const cnt = (ws, m) => (byWeek[ws] && byWeek[ws][m] ? byWeek[ws][m].size : 0);
+
+  /* semana atual */
+  const wsT = iso(thisWs), muscles = new Set(Object.keys(byWeek[wsT] || {}));
+  if (prog) prog.days.forEach(d => d.muscles.forEach(m => muscles.add(m)));
+  const ahead = {};
+  if (prog) {
+    for (let d = S.checkins.some(c => c.programId === prog.id && c.date === iso(t)) ? addDays(t, 1) : t; d < addDays(thisWs, 7); d = addDays(d, 1)) {
+      const k = planKey(prog, d);
+      if (k) dayMuscles(prog, k).forEach(m => { ahead[m] = (ahead[m] || 0) + 1; });
+    }
+  }
+  const partial = !!prog && parseISO(prog.start) > thisWs;   // semana em que o programa começou: ainda curta
+  const state = m => { const c = cnt(wsT, m); return c >= MIN_WEEK ? 'ok' : c + (ahead[m] || 0) >= MIN_WEEK ? 'track' : partial ? 'none' : 'risk'; };
+  const rank = { risk: 0, none: 1, track: 2, ok: 3 };
+  const cur = [...muscles].sort((x, y) => rank[state(x)] - rank[state(y)] || x.localeCompare(y));
+  const risk = cur.filter(m => state(m) === 'risk');
+
+  /* semanas completas */
+  const first = cis.reduce((mn, c) => (c.date < mn ? c.date : mn), cis[0].date);
+  let startD = from && from > parseISO(first) ? from : parseISO(first);
+  let w = addDays(startD, -startD.getDay());
+  if (w < startD) w = addDays(w, 7);
+  const weeks = [];
+  for (; w < thisWs; w = addDays(w, 7)) weeks.push(iso(w));
+  const hist = [...new Set([...muscles, ...cis.flatMap(c => Object.keys(c.ratings))])].map(m => {
+    const hit = weeks.filter(ws => cnt(ws, m) >= MIN_WEEK).length;
+    return { m, hit, pct: weeks.length ? hit / weeks.length : 0, avg: weeks.length ? mean(weeks.map(ws => cnt(ws, m))) : 0 };
+  }).sort((x, y) => x.pct - y.pct || x.avg - y.avg);
+  const weak = hist.filter(h => h.pct < 0.5);
+
+  return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h2>Meta: ${MIN_WEEK}× por semana</h2><span class="sub">cada grupo, de dom a sáb</span></div>
+    <div class="sub" style="margin-bottom:8px">Esta semana</div>
+    <div class="chips">${cur.map(m => `<span class="chip ${state(m)}" title="${state(m) === 'track' ? 'Previsto pelo plano' : ''}"><i class="dot" style="background:${colorOf(m)}"></i>${esc(m)} ${cnt(wsT, m)}/${MIN_WEEK}${state(m) === 'ok' ? ' ✓' : ''}</span>`).join('')}</div>
+    <div class="legend" style="margin-top:10px"><span><i style="background:var(--ok-soft)"></i>meta batida</span><span><i style="background:var(--accent-soft)"></i>vai bater se seguir o plano</span><span><i style="background:var(--bad-soft)"></i>em risco</span></div>
+    ${partial ? '<div class="insight">Esta é a primeira semana do programa, então ela é mais curta. A meta passa a valer na próxima semana completa.</div>'
+      : risk.length ? `<div class="insight"><b>Em risco esta semana:</b> ${risk.map(esc).join(', ')}. ${prog ? 'O plano restante não inclui esses grupos o suficiente.' : ''}</div>`
+      : '<div class="insight">Todos os grupos estão batendo a meta ou no caminho certo.</div>'}
+    <div class="sub" style="margin:18px 0 4px">Semanas completas${weeks.length ? ` (${weeks.length})` : ''}</div>
+    ${weeks.length ? hist.map(h => hbar(h.m, 100 * h.pct, `${h.hit}/${weeks.length} sem · ${fmt1(h.avg)}×`, h.pct >= 0.75 ? 'var(--ok)' : h.pct >= 0.4 ? 'var(--star)' : 'var(--bad)', colorOf(h.m))).join('') : '<p class="sub" style="margin:0">Ainda não há semana completa no período.</p>'}
+    ${weeks.length && weak.length ? `<div class="insight">Abaixo da meta na maioria das semanas: <b>${weak.map(h => esc(h.m)).join(', ')}</b>.</div>` : ''}</div>`;
+}
+
 /* ---------- Programa ---------- */
 function viewProg() {
   const t = today0();
@@ -563,12 +685,19 @@ function viewProg() {
   return head + `<div class="grid">${S.programs.map(p => {
     const end = programEnd(p), st = parseISO(p.start);
     const status = t < st ? 'Agendado' : end && t > end ? 'Encerrado' : 'Em andamento';
-    const sched = [1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip" style="padding:4px 10px;font-size:13px;${p.schedule[i] ? 'background:var(--accent-soft);color:var(--accent);font-weight:700' : ''}">${WD[i]} ${p.schedule[i] || '–'}</span>`).join('');
-    return `<div class="card prog span2"><div class="card-h"><div><h3>${esc(p.name)}</h3><span class="sub">Rotina ${p.days.map(d => d.key).join('')} · ${p.weeks ? p.weeks + ' semanas' : 'sem data final'}</span></div>
+    const chipSt = on => `padding:4px 10px;font-size:13px;${on ? 'background:var(--accent-soft);color:var(--accent);font-weight:700' : ''}`;
+    const sched = isRolling(p)
+      ? [1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip" style="${chipSt(availDays(p).includes(i))}">${WD[i]} ${availDays(p).includes(i) ? '✓' : '–'}</span>`).join('')
+      : [1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip" style="${chipSt(p.schedule[i])}">${WD[i]} ${p.schedule[i] || '–'}</span>`).join('');
+    const nxt = isRolling(p) ? upcoming(p, 5) : [];
+    const fq = Object.values(weeklyFreq(p)), okN = fq.filter(meets).length;
+    return `<div class="card prog span2"><div class="card-h"><div><h3>${esc(p.name)}</h3><span class="sub">Rotina ${p.days.map(d => d.key).join('')} · ${isRolling(p) ? 'corrida' : 'convencional'} · ${p.weeks ? p.weeks + ' semanas' : 'sem data final'}</span></div>
       <span class="badge ${p.id === S.activeProgramId ? 'on' : ''}">${p.id === S.activeProgramId ? 'Ativo' : status}</span></div>
       <div class="prog-days">${p.days.map(d => `<div class="daybox"><div class="k">${d.key}</div><div class="chips">${d.muscles.map(chip).join('') || '<span class="sub">sem grupos</span>'}</div></div>`).join('')}</div>
       <div class="sub" style="margin:10px 0 8px">${brDate(p.start)}${end ? ' → ' + brDate(iso(end)) : ' → ∞'}</div>
       <div class="chips" style="gap:6px">${sched}</div>
+      ${nxt.length ? `<div class="sub" style="margin:12px 0 6px">Próximos treinos</div><div class="chips" style="gap:6px">${nxt.map(x => `<span class="chip" style="padding:4px 10px;font-size:13px"><b>${x.key}</b> ${WD[x.date.getDay()]} ${brShort(iso(x.date))}</span>`).join('')}</div>` : ''}
+      <p class="sub" style="margin:12px 0 0">Meta de ${MIN_WEEK}× por semana: <b style="color:${okN === fq.length ? 'var(--ok)' : 'var(--star)'}">${okN} de ${fq.length}</b> grupos</p>
       <div class="actions">${p.id === S.activeProgramId ? '' : `<button class="btn sm" data-act="prog-activate" data-id="${p.id}">Ativar</button>`}
         <button class="btn ghost sm" data-act="prog-edit" data-id="${p.id}">Editar</button>
         <button class="btn ghost sm" data-act="prog-dup" data-id="${p.id}">Duplicar</button>
@@ -584,8 +713,9 @@ function openProgEditor(id) {
     const p = programById(id);
     ed = JSON.parse(JSON.stringify(p));
     ed.n = p.days.length;
+    ed.mode = ed.mode || 'fixed'; ed.avail = ed.avail || [0, 1, 2, 3, 4, 5, 6]; ed.skips = ed.skips || [];
   } else {
-    ed = { id: null, name: `Programa ${S.programs.length + 1}`, n: 3, days: [], start: iso(new Date()), weeks: 8, schedule: defaultSchedule(3) };
+    ed = { id: null, name: `Programa ${S.programs.length + 1}`, n: 3, days: [], start: iso(new Date()), weeks: 8, schedule: defaultSchedule(3), mode: 'fixed', avail: [0, 1, 2, 3, 4, 5, 6], skips: [] };
     edSetN(3, true);
   }
   drawEditor();
@@ -602,6 +732,22 @@ function edSetN(n, isNew) {
     Object.keys(ed.schedule).forEach(w => { if (!keys.includes(ed.schedule[w])) delete ed.schedule[w]; });
     if (!Object.keys(ed.schedule).length) ed.schedule = defaultSchedule(n);
   }
+}
+/** programa em edição como objeto (para prévias e para salvar) */
+function edProgram() {
+  return { id: ed.id, name: ed.name, routine: ed.days.map(d => d.key).join(''), days: ed.days, start: ed.start, weeks: ed.weeks,
+    schedule: ed.schedule, mode: ed.mode, avail: ed.avail, skips: ed.skips };
+}
+/** quadro de frequência semanal: meta de treinar cada grupo ao menos 2× por semana */
+function freqCardHtml(p, heading = '4 · Frequência semanal') {
+  const list = Object.entries(weeklyFreq(p)).sort((x, y) => x[1] - y[1]);
+  if (!list.length) return '';
+  const low = list.filter(([, v]) => !meets(v)).map(([m]) => m);
+  const absent = allMuscles().filter(m => !(m in weeklyFreq(p)));
+  return `<div class="card"><h2>${heading}</h2><div class="sub" style="margin:-6px 0 10px">Meta: treinar cada grupo ao menos ${MIN_WEEK}× por semana${isRolling(p) ? ' (estimativa com os dias disponíveis)' : ''}</div>
+    ${list.map(([m, v]) => hbar(m, Math.min(100, 100 * v / MIN_WEEK), `${fmt1(v)}×${meets(v) ? ' ✓' : ''}`, meets(v) ? 'var(--ok)' : 'var(--star)', colorOf(m))).join('')}
+    <div class="insight">${low.length ? `<b>${low.length} de ${list.length}</b> grupos abaixo da meta: ${low.map(esc).join(', ')}. Coloque-os em mais um dia da rotina ou treine mais dias por semana.` : `Todos os <b>${list.length}</b> grupos chegam a ${MIN_WEEK}× por semana.`}</div>
+    ${absent.length ? `<p class="sub" style="margin:10px 0 0">Fora do programa: ${absent.map(esc).join(', ')}.</p>` : ''}</div>`;
 }
 function drawEditor() {
   const end = ed.weeks > 0 ? iso(addDays(parseISO(ed.start), ed.weeks * 7 - 1)) : null;
@@ -621,16 +767,31 @@ function drawEditor() {
         <div class="field"><span>Duração</span><div class="stepper"><button data-act="ed-w" data-v="-1">−</button><b>${ed.weeks ? ed.weeks + ' sem' : '∞'}</b><button data-act="ed-w" data-v="1">＋</button></div></div></div>
       <div class="scroll-x" style="margin-bottom:6px">${[4, 8, 12, 16, 0].map(w => `<button class="chip ${ed.weeks === w ? 'on' : ''}" data-act="ed-wset" data-v="${w}">${w ? w + ' semanas' : 'Sem fim'}</button>`).join('')}</div>
       <p class="sub" style="margin:6px 0 16px">${end ? 'Termina em ' + brDate(end) : 'Sem data final'}</p>
-      <div class="sub" style="margin-bottom:8px">Toque em cada dia da semana para escolher o treino</div>
-      <div class="wk">${[0, 1, 2, 3, 4, 5, 6].map(i => `<button class="${ed.schedule[i] ? 'on' : ''}" data-act="ed-wd" data-i="${i}"><small>${WD[i]}</small><b>${ed.schedule[i] || '–'}</b></button>`).join('')}</div></div>
+      <div class="sub" style="margin-bottom:8px">Como organizar os treinos na semana?</div>
+      <div class="seg" style="margin-bottom:12px"><button class="${ed.mode === 'fixed' ? 'on' : ''}" data-act="ed-mode" data-v="fixed">Convencional</button><button class="${ed.mode === 'rolling' ? 'on' : ''}" data-act="ed-mode" data-v="rolling">Corrida</button></div>
+      ${ed.mode === 'fixed' ? `
+      <p class="sub" style="margin:0 0 10px">Cada dia da semana tem sua rotina fixa (ex.: segunda = A, terça = B). Toque nos dias para escolher.</p>
+      <div class="wk">${[0, 1, 2, 3, 4, 5, 6].map(i => `<button class="${ed.schedule[i] ? 'on' : ''}" data-act="ed-wd" data-i="${i}"><small>${WD[i]}</small><b>${ed.schedule[i] || '–'}</b></button>`).join('')}</div>` : `
+      <p class="sub" style="margin:0 0 10px">As rotinas seguem em sequência (${ed.days.map(d => d.key).join(' → ')} → …). Se você faltar ou pular um dia, a próxima rotina não se perde: ela passa para o dia seguinte.</p>
+      <div class="sub" style="margin-bottom:8px">Dias da semana em que você pode treinar</div>
+      <div class="wk">${[0, 1, 2, 3, 4, 5, 6].map(i => `<button class="${ed.avail.includes(i) ? 'on' : ''}" data-act="ed-avail" data-i="${i}"><small>${WD[i]}</small><b>${ed.avail.includes(i) ? '✓' : '–'}</b></button>`).join('')}</div>
+      <div class="sub" style="margin:16px 0 8px">Dias que você já sabe que vai pular</div>
+      <div class="chips" style="margin-bottom:10px">${[...ed.skips].sort().filter(s => s >= iso(today0())).map(s => `<button class="chip" data-act="ed-skipdel" data-d="${s}">${brShort(s)} ${WD[parseISO(s).getDay()]} ✕</button>`).join('') || '<span class="sub">Nenhum. Você também marca pelo calendário ou na tela inicial.</span>'}</div>
+      <div class="two"><input class="in" type="date" id="skip-date" min="${iso(today0())}" data-bind="ed-skipdate"><button class="btn ghost" data-act="ed-skipadd">Adicionar</button></div>
+      <div class="sub" style="margin:16px 0 8px">Próximos treinos</div>
+      <div class="chips">${upcoming(edProgram(), 7).map(x => `<span class="chip"><b>${x.key}</b> ${WD[x.date.getDay()]} ${brShort(iso(x.date))}</span>`).join('') || '<span class="sub">Escolha ao menos um dia disponível.</span>'}</div>`}
+    </div>
+
+    ${freqCardHtml(edProgram())}
 
     <div class="sheet-foot"><button class="btn block" data-act="ed-save">Salvar programa</button></div></div>`, !!$('#sheet .ed-sheet'));
 }
 function saveProgram() {
   ed.name = ed.name.trim() || 'Meu programa';
   if (ed.days.some(d => !d.muscles.length)) return toast('Escolha ao menos um grupo em cada dia');
-  if (!Object.keys(ed.schedule).length) return toast('Escolha ao menos um dia da semana');
-  const p = { id: ed.id || uid(), name: ed.name, routine: ed.days.map(d => d.key).join(''), days: ed.days, start: ed.start, weeks: ed.weeks, schedule: ed.schedule, u: stamp() };
+  if (ed.mode === 'fixed' && !Object.keys(ed.schedule).length) return toast('Escolha ao menos um dia da semana');
+  if (ed.mode === 'rolling' && !ed.avail.length) return toast('Escolha ao menos um dia disponível');
+  const p = { id: ed.id || uid(), name: ed.name, routine: ed.days.map(d => d.key).join(''), days: ed.days, start: ed.start, weeks: ed.weeks, schedule: ed.schedule, mode: ed.mode, avail: ed.avail, skips: ed.skips, u: stamp() };
   const i = S.programs.findIndex(x => x.id === p.id);
   if (i >= 0) S.programs[i] = p; else { S.programs.push(p); S.activeProgramId = p.id; }
   if (!S.activeProgramId) S.activeProgramId = p.id;
@@ -752,6 +913,29 @@ const A = {
     drawEditor();
   },
   'ed-save': () => saveProgram(),
+  'ed-mode': el => { ed.mode = el.dataset.v; drawEditor(); },
+  'ed-avail': el => {
+    const i = +el.dataset.i;
+    ed.avail = ed.avail.includes(i) ? ed.avail.filter(x => x !== i) : [...ed.avail, i].sort();
+    drawEditor();
+  },
+  'ed-skipadd': () => {
+    const v = ($('#skip-date') || {}).value;
+    if (!v) return toast('Escolha a data');
+    if (!ed.skips.includes(v)) ed.skips.push(v);
+    drawEditor();
+  },
+  'ed-skipdel': el => { ed.skips = ed.skips.filter(x => x !== el.dataset.d); drawEditor(); },
+  'skip-toggle': el => {
+    const p = activeProgram(), di = el.dataset.date;
+    if (!p) return;
+    p.skips = p.skips || [];
+    const had = p.skips.includes(di);
+    p.skips = had ? p.skips.filter(x => x !== di) : [...p.skips, di];
+    p.u = stamp(); save();
+    toast(had ? 'Dia desmarcado' : isRolling(p) ? 'Dia pulado. A sequência foi ajustada' : 'Dia sem treino marcado');
+    if (sheetOpen) openDay(di); else render();
+  },
 
   login: () => Sync.login(),
   logout: () => Sync.logout(),
